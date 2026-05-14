@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "RepDeck",
+    "slug": "repdeck",
+    "version": "1.0.0",
+    "scheme": "repdeck",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f0f0f"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f0f0f"
+      },
+      "package": "com.repdeck.app"
+    },
+    "plugins": [
+      "expo-router",
+      ["expo-haptics", {}]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
