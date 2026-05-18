@@ -21,6 +21,7 @@ const JOKER_RULE_OPTIONS: { label: string; rule: JokerRule }[] = [
 ];
 
 export default function SetupScreen() {
+  console.log("SetupScreen rendering");
   const [exercises, setExercises] = useState<Record<Suit, string>>(
     DEFAULT_CONFIG.suitExercises
   );

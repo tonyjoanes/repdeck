@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as Haptics from "expo-haptics";
 import type { Card, CardResult, WorkoutConfig } from "@/types/workout";
 import { buildDeck } from "@/utils/deck";
 
@@ -54,12 +53,6 @@ export function useWorkoutSession(config: WorkoutConfig): UseWorkoutSessionRetur
       );
       const nextIndex = prev.currentIndex + 1;
       const isComplete = nextIndex >= prev.cards.length;
-
-      if (isComplete) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      } else {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      }
 
       return { ...prev, cards: updatedCards, currentIndex: nextIndex, isComplete };
     });

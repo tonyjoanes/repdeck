@@ -20,8 +20,7 @@
       "package": "com.repdeck.app"
     },
     "plugins": [
-      "expo-router",
-      ["expo-haptics", {}]
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true
