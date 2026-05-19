@@ -22,10 +22,10 @@ export const SUIT_SYMBOLS: Record<Suit, string> = {
 };
 
 export const SUIT_COLORS: Record<Suit, string> = {
-  hearts: "#e63946",
-  diamonds: "#e63946",
-  clubs: "#f1f1f1",
-  spades: "#f1f1f1",
+  hearts: "#ff4d6d",
+  diamonds: "#ffb703",
+  clubs: "#8ecae6",
+  spades: "#f8f7f3",
 };
 
 export const CARD_COUNT_OPTIONS: CardCount[] = [10, 20, 26, 52];
