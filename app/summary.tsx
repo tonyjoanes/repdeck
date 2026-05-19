@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView } from "react-native";
 import { router } from "expo-router";
 import type { CardResult, SessionResult, Suit } from "@/types/workout";
 import { SUIT_COLORS, SUIT_SYMBOLS } from "@/constants/defaults";
 import { getLastResult } from "@/store/sessionStore";
+import { saveSession } from "@/db/sessions";
 
 const SUITS: Suit[] = ["hearts", "diamonds", "clubs", "spades"];
 
@@ -40,6 +41,7 @@ function computeStats(result: SessionResult) {
 
 export default function SummaryScreen() {
   const [result, setResult] = useState<SessionResult | null>(null);
+  const savedRef = useRef(false);
 
   useEffect(() => {
     const r = getLastResult();
@@ -48,6 +50,10 @@ export default function SummaryScreen() {
       return;
     }
     setResult(r);
+    if (!savedRef.current) {
+      savedRef.current = true;
+      saveSession(r);
+    }
   }, []);
 
   if (!result) return null;

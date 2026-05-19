@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   StyleSheet,
   SafeAreaView,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import type { CardCount, JokerRule, Suit, WorkoutConfig } from "@/types/workout";
 import { CARD_COUNT_OPTIONS, DEFAULT_CONFIG, SUIT_COLORS, SUIT_SYMBOLS } from "@/constants/defaults";
 
@@ -21,7 +21,8 @@ const JOKER_RULE_OPTIONS: { label: string; rule: JokerRule }[] = [
 ];
 
 export default function SetupScreen() {
-  console.log("SetupScreen rendering");
+  const { config: configParam } = useLocalSearchParams<{ config?: string }>();
+
   const [exercises, setExercises] = useState<Record<Suit, string>>(
     DEFAULT_CONFIG.suitExercises
   );
@@ -29,6 +30,27 @@ export default function SetupScreen() {
   const [includeJokers, setIncludeJokers] = useState(false);
   const [jokerRuleIndex, setJokerRuleIndex] = useState(0);
   const [fixedReps, setFixedReps] = useState("20");
+
+  // Pre-fill when navigated from History "Use Config"
+  useEffect(() => {
+    if (!configParam) return;
+    try {
+      const c = JSON.parse(configParam) as WorkoutConfig;
+      setExercises(c.suitExercises);
+      setCardCount(c.cardCount);
+      setIncludeJokers(c.includeJokers);
+      if (c.jokerRule.type === "fixed") {
+        setJokerRuleIndex(1);
+        setFixedReps(String(c.jokerRule.reps));
+      } else if (c.jokerRule.type === "failure") {
+        setJokerRuleIndex(2);
+      } else {
+        setJokerRuleIndex(0);
+      }
+    } catch {
+      // ignore malformed param
+    }
+  }, [configParam]);
 
   const jokerRule = (): JokerRule => {
     const selected = JOKER_RULE_OPTIONS[jokerRuleIndex];
@@ -58,7 +80,12 @@ export default function SetupScreen() {
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>RepDeck</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>RepDeck</Text>
+          <TouchableOpacity onPress={() => router.push("/history")} style={styles.historyBtn}>
+            <Text style={styles.historyBtnText}>History</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.tagline}>Shuffle. Flip. Suffer. Track.</Text>
 
         {/* Suit exercises */}
@@ -154,7 +181,10 @@ export default function SetupScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0f0f0f" },
   scroll: { padding: 24, paddingBottom: 48 },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   title: { fontSize: 36, fontWeight: "900", color: "#fff", letterSpacing: 1 },
+  historyBtn: { paddingVertical: 6, paddingHorizontal: 12 },
+  historyBtnText: { color: "#e63946", fontSize: 15, fontWeight: "700" },
   tagline: { fontSize: 13, color: "#666", marginTop: 4, marginBottom: 32, letterSpacing: 2 },
   sectionLabel: { fontSize: 11, color: "#666", letterSpacing: 2, marginBottom: 10, marginTop: 24 },
   suitRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
