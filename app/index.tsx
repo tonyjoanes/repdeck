@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,10 +8,14 @@ import {
   Switch,
   StyleSheet,
   SafeAreaView,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import type { CardCount, JokerRule, Suit, WorkoutConfig } from "@/types/workout";
 import { CARD_COUNT_OPTIONS, DEFAULT_CONFIG, SUIT_COLORS, SUIT_SYMBOLS } from "@/constants/defaults";
+import { getTemplates, saveTemplate, deleteTemplate, type StoredTemplate } from "@/db/templates";
 
 const SUITS: Suit[] = ["hearts", "diamonds", "clubs", "spades"];
 const JOKER_RULE_OPTIONS: { label: string; rule: JokerRule }[] = [
@@ -23,47 +27,54 @@ const JOKER_RULE_OPTIONS: { label: string; rule: JokerRule }[] = [
 export default function SetupScreen() {
   const { config: configParam } = useLocalSearchParams<{ config?: string }>();
 
-  const [exercises, setExercises] = useState<Record<Suit, string>>(
-    DEFAULT_CONFIG.suitExercises
-  );
+  const [exercises, setExercises] = useState<Record<Suit, string>>(DEFAULT_CONFIG.suitExercises);
   const [cardCount, setCardCount] = useState<CardCount>(DEFAULT_CONFIG.cardCount);
   const [includeJokers, setIncludeJokers] = useState(false);
   const [jokerRuleIndex, setJokerRuleIndex] = useState(0);
   const [fixedReps, setFixedReps] = useState("20");
 
-  // Pre-fill when navigated from History "Use Config"
+  const [templates, setTemplates] = useState<StoredTemplate[]>([]);
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const templateNameRef = useRef<TextInput>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      setTemplates(getTemplates());
+    }, [])
+  );
+
+  // Pre-fill when navigated back from History "Use Config"
   useEffect(() => {
     if (!configParam) return;
     try {
-      const c = JSON.parse(configParam) as WorkoutConfig;
-      setExercises(c.suitExercises);
-      setCardCount(c.cardCount);
-      setIncludeJokers(c.includeJokers);
-      if (c.jokerRule.type === "fixed") {
-        setJokerRuleIndex(1);
-        setFixedReps(String(c.jokerRule.reps));
-      } else if (c.jokerRule.type === "failure") {
-        setJokerRuleIndex(2);
-      } else {
-        setJokerRuleIndex(0);
-      }
+      applyConfig(JSON.parse(configParam) as WorkoutConfig);
     } catch {
       // ignore malformed param
     }
   }, [configParam]);
 
-  const jokerRule = (): JokerRule => {
-    const selected = JOKER_RULE_OPTIONS[jokerRuleIndex];
-    if (selected.rule.type === "fixed") {
-      return { type: "fixed", reps: Math.max(1, parseInt(fixedReps, 10) || 20) };
+  function applyConfig(c: WorkoutConfig) {
+    setExercises(c.suitExercises);
+    setCardCount(c.cardCount);
+    setIncludeJokers(c.includeJokers);
+    if (c.jokerRule.type === "fixed") {
+      setJokerRuleIndex(1);
+      setFixedReps(String(c.jokerRule.reps));
+    } else if (c.jokerRule.type === "failure") {
+      setJokerRuleIndex(2);
+    } else {
+      setJokerRuleIndex(0);
     }
-    return selected.rule;
-  };
+  }
 
-  const canStart = SUITS.every((s) => exercises[s].trim().length > 0);
-
-  function startWorkout() {
-    const config: WorkoutConfig = {
+  function currentConfig(): WorkoutConfig {
+    const selected = JOKER_RULE_OPTIONS[jokerRuleIndex];
+    const jokerRule: JokerRule =
+      selected.rule.type === "fixed"
+        ? { type: "fixed", reps: Math.max(1, parseInt(fixedReps, 10) || 20) }
+        : selected.rule;
+    return {
       suitExercises: {
         hearts: exercises.hearts.trim(),
         diamonds: exercises.diamonds.trim(),
@@ -72,14 +83,34 @@ export default function SetupScreen() {
       },
       cardCount,
       includeJokers,
-      jokerRule: jokerRule(),
+      jokerRule,
     };
-    router.push({ pathname: "/session", params: { config: JSON.stringify(config) } });
+  }
+
+  const canStart = SUITS.every((s) => exercises[s].trim().length > 0);
+
+  function startWorkout() {
+    router.push({ pathname: "/session", params: { config: JSON.stringify(currentConfig()) } });
+  }
+
+  function handleSaveTemplate() {
+    const name = templateName.trim();
+    if (!name) return;
+    saveTemplate(name, currentConfig());
+    setTemplates(getTemplates());
+    setSaveModalVisible(false);
+    setTemplateName("");
+  }
+
+  function handleDeleteTemplate(id: string) {
+    deleteTemplate(id);
+    setTemplates(getTemplates());
   }
 
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        {/* Header */}
         <View style={styles.titleRow}>
           <Text style={styles.title}>RepDeck</Text>
           <TouchableOpacity onPress={() => router.push("/history")} style={styles.historyBtn}>
@@ -88,7 +119,37 @@ export default function SetupScreen() {
         </View>
         <Text style={styles.tagline}>Shuffle. Flip. Suffer. Track.</Text>
 
-        {/* Suit exercises */}
+        {/* Saved templates */}
+        {templates.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>SAVED TEMPLATES</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.templateRow}
+            >
+              {templates.map((t) => (
+                <View key={t.id} style={styles.templateChip}>
+                  <TouchableOpacity onPress={() => applyConfig(t.config)} style={styles.templateChipLabel}>
+                    <Text style={styles.templateName}>{t.name}</Text>
+                    <Text style={styles.templateMeta}>
+                      {t.config.cardCount === 26 ? "Half" : t.config.cardCount === 52 ? "Full" : t.config.cardCount} cards
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteTemplate(t.id)}
+                    style={styles.templateDelete}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={styles.templateDeleteText}>×</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {/* Exercises */}
         <Text style={styles.sectionLabel}>EXERCISES</Text>
         {SUITS.map((suit) => (
           <View key={suit} style={styles.suitRow}>
@@ -106,7 +167,7 @@ export default function SetupScreen() {
           </View>
         ))}
 
-        {/* Card count */}
+        {/* Deck size */}
         <Text style={styles.sectionLabel}>DECK SIZE</Text>
         <View style={styles.segmentRow}>
           {CARD_COUNT_OPTIONS.map((count) => (
@@ -166,6 +227,7 @@ export default function SetupScreen() {
           </>
         )}
 
+        {/* Actions */}
         <TouchableOpacity
           style={[styles.startBtn, !canStart && styles.startBtnDisabled]}
           onPress={startWorkout}
@@ -173,7 +235,61 @@ export default function SetupScreen() {
         >
           <Text style={styles.startBtnText}>Start Workout</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.saveTemplateBtn}
+          onPress={() => {
+            setTemplateName("");
+            setSaveModalVisible(true);
+          }}
+        >
+          <Text style={styles.saveTemplateBtnText}>+ Save as Template</Text>
+        </TouchableOpacity>
       </ScrollView>
+
+      {/* Save template modal */}
+      <Modal
+        visible={saveModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSaveModalVisible(false)}
+        onShow={() => setTimeout(() => templateNameRef.current?.focus(), 50)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Save Template</Text>
+            <TextInput
+              ref={templateNameRef}
+              style={styles.modalInput}
+              value={templateName}
+              onChangeText={setTemplateName}
+              placeholder="e.g. Monday KB, Quick 10, Full Deck"
+              placeholderTextColor="#555"
+              returnKeyType="done"
+              onSubmitEditing={handleSaveTemplate}
+              autoCapitalize="words"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setSaveModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSave, !templateName.trim() && styles.modalSaveDisabled]}
+                onPress={handleSaveTemplate}
+                disabled={!templateName.trim()}
+              >
+                <Text style={styles.modalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -187,6 +303,30 @@ const styles = StyleSheet.create({
   historyBtnText: { color: "#e63946", fontSize: 15, fontWeight: "700" },
   tagline: { fontSize: 13, color: "#666", marginTop: 4, marginBottom: 32, letterSpacing: 2 },
   sectionLabel: { fontSize: 11, color: "#666", letterSpacing: 2, marginBottom: 10, marginTop: 24 },
+
+  // Templates
+  templateRow: { gap: 10, paddingBottom: 4 },
+  templateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1a1a1a",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    overflow: "hidden",
+  },
+  templateChipLabel: { paddingHorizontal: 14, paddingVertical: 10, gap: 2 },
+  templateName: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  templateMeta: { color: "#555", fontSize: 11 },
+  templateDelete: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderLeftWidth: 1,
+    borderLeftColor: "#2a2a2a",
+  },
+  templateDeleteText: { color: "#555", fontSize: 18, lineHeight: 20 },
+
+  // Exercises
   suitRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   suitSymbol: { fontSize: 28, width: 40 },
   input: {
@@ -216,6 +356,8 @@ const styles = StyleSheet.create({
   segmentText: { color: "#777", fontSize: 14, fontWeight: "600" },
   segmentTextActive: { color: "#fff" },
   jokerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+
+  // Actions
   startBtn: {
     marginTop: 40,
     backgroundColor: "#e63946",
@@ -225,4 +367,51 @@ const styles = StyleSheet.create({
   },
   startBtnDisabled: { backgroundColor: "#3a1a1d", opacity: 0.6 },
   startBtnText: { color: "#fff", fontSize: 18, fontWeight: "800", letterSpacing: 1 },
+  saveTemplateBtn: { marginTop: 14, alignItems: "center", paddingVertical: 10 },
+  saveTemplateBtnText: { color: "#555", fontSize: 14, fontWeight: "600" },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  modalBox: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    gap: 16,
+  },
+  modalTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  modalInput: {
+    backgroundColor: "#0f0f0f",
+    color: "#fff",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  modalActions: { flexDirection: "row", gap: 10 },
+  modalCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#2a2a2a",
+    alignItems: "center",
+  },
+  modalCancelText: { color: "#aaa", fontSize: 15, fontWeight: "600" },
+  modalSave: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#e63946",
+    alignItems: "center",
+  },
+  modalSaveDisabled: { opacity: 0.4 },
+  modalSaveText: { color: "#fff", fontSize: 15, fontWeight: "800" },
 });

@@ -25,6 +25,12 @@ function getDb(): SQLite.SQLiteDatabase {
         reps INTEGER NOT NULL,
         completed INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS workout_templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        config TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
   }
   return _db;
