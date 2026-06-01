@@ -11,6 +11,12 @@ export type StoredSession = {
   config: WorkoutConfig;
 };
 
+export type ExerciseStat = {
+  exercise: string;
+  total_reps: number;
+  session_count: number;
+};
+
 type RawSession = Omit<StoredSession, "config"> & { config: string };
 
 export function saveSession(result: SessionResult): string {
@@ -47,4 +53,17 @@ export function getRecentSessions(limit = 30): StoredSession[] {
     [limit]
   );
   return rows.map((row) => ({ ...row, config: JSON.parse(row.config) as WorkoutConfig }));
+}
+
+export function getExerciseStats(since: Date): ExerciseStat[] {
+  const db = getDb();
+  return db.getAllSync<ExerciseStat>(
+    `SELECT cr.exercise, SUM(cr.reps) AS total_reps, COUNT(DISTINCT cr.session_id) AS session_count
+     FROM card_results cr
+     JOIN workout_sessions ws ON cr.session_id = ws.id
+     WHERE ws.started_at >= ? AND cr.completed = 1 AND cr.reps > 0 AND cr.suit != 'joker'
+     GROUP BY cr.exercise
+     ORDER BY total_reps DESC`,
+    [since.toISOString()]
+  );
 }

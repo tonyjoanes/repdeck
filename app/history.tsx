@@ -10,9 +10,35 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import type { Suit } from "@/types/workout";
 import { SUIT_COLORS, SUIT_SYMBOLS } from "@/constants/defaults";
-import { getRecentSessions, type StoredSession } from "@/db/sessions";
+import {
+  getRecentSessions,
+  getExerciseStats,
+  type StoredSession,
+  type ExerciseStat,
+} from "@/db/sessions";
 
 const SUITS: Suit[] = ["hearts", "diamonds", "clubs", "spades"];
+
+type Period = "week" | "month" | "all";
+const PERIODS: { label: string; value: Period }[] = [
+  { label: "This Week", value: "week" },
+  { label: "This Month", value: "month" },
+  { label: "All Time", value: "all" },
+];
+
+function periodStart(p: Period): Date {
+  const now = new Date();
+  if (p === "week") {
+    const d = new Date(now);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  if (p === "month") {
+    return new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  }
+  return new Date(0);
+}
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -34,13 +60,6 @@ function formatTime(seconds: number): string {
 }
 
 function SessionRow({ session }: { session: StoredSession }) {
-  function useThisConfig() {
-    router.replace({
-      pathname: "/",
-      params: { config: JSON.stringify(session.config) },
-    });
-  }
-
   return (
     <View style={styles.row}>
       <View style={styles.rowHeader}>
@@ -66,7 +85,15 @@ function SessionRow({ session }: { session: StoredSession }) {
           <Text style={styles.statNumber}>{formatTime(session.elapsed_seconds)}</Text>
           <Text style={styles.statLabel}>time</Text>
         </View>
-        <TouchableOpacity style={styles.useBtn} onPress={useThisConfig}>
+        <TouchableOpacity
+          style={styles.useBtn}
+          onPress={() =>
+            router.replace({
+              pathname: "/",
+              params: { config: JSON.stringify(session.config) },
+            })
+          }
+        >
           <Text style={styles.useBtnText}>Use Config</Text>
         </TouchableOpacity>
       </View>
@@ -74,8 +101,79 @@ function SessionRow({ session }: { session: StoredSession }) {
   );
 }
 
+function StatsView() {
+  const [period, setPeriod] = useState<Period>("month");
+  const [stats, setStats] = useState<ExerciseStat[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setStats(getExerciseStats(periodStart(period)));
+    }, [period])
+  );
+
+  // Reload when period changes
+  const handlePeriod = (p: Period) => {
+    setPeriod(p);
+    setStats(getExerciseStats(periodStart(p)));
+  };
+
+  const maxReps = stats[0]?.total_reps ?? 1;
+
+  return (
+    <View style={styles.statsContainer}>
+      {/* Period picker */}
+      <View style={styles.segmentRow}>
+        {PERIODS.map((p) => (
+          <TouchableOpacity
+            key={p.value}
+            style={[styles.segmentBtn, period === p.value && styles.segmentBtnActive]}
+            onPress={() => handlePeriod(p.value)}
+          >
+            <Text style={[styles.segmentText, period === p.value && styles.segmentTextActive]}>
+              {p.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {stats.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyText}>No data for this period.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={stats}
+          keyExtractor={(item) => item.exercise}
+          contentContainerStyle={styles.statsList}
+          renderItem={({ item }) => (
+            <View style={styles.statRow}>
+              <View style={styles.statRowTop}>
+                <Text style={styles.statExercise}>{item.exercise}</Text>
+                <Text style={styles.statReps}>{item.total_reps.toLocaleString()} reps</Text>
+              </View>
+              {/* Volume bar */}
+              <View style={styles.barTrack}>
+                <View
+                  style={[
+                    styles.barFill,
+                    { width: `${(item.total_reps / maxReps) * 100}%` },
+                  ]}
+                />
+              </View>
+              <Text style={styles.statSessions}>
+                {item.session_count} {item.session_count === 1 ? "session" : "sessions"}
+              </Text>
+            </View>
+          )}
+        />
+      )}
+    </View>
+  );
+}
+
 export default function HistoryScreen() {
   const [sessions, setSessions] = useState<StoredSession[]>([]);
+  const [view, setView] = useState<"sessions" | "stats">("sessions");
 
   useFocusEffect(
     useCallback(() => {
@@ -85,6 +183,7 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView style={styles.root}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backText}>‹ Back</Text>
@@ -92,18 +191,42 @@ export default function HistoryScreen() {
         <Text style={styles.title}>History</Text>
       </View>
 
-      {sessions.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>No workouts yet.</Text>
-          <Text style={styles.emptySubtext}>Complete a session to see it here.</Text>
-        </View>
+      {/* View toggle */}
+      <View style={styles.viewToggle}>
+        <TouchableOpacity
+          style={[styles.toggleBtn, view === "sessions" && styles.toggleBtnActive]}
+          onPress={() => setView("sessions")}
+        >
+          <Text style={[styles.toggleText, view === "sessions" && styles.toggleTextActive]}>
+            Sessions
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleBtn, view === "stats" && styles.toggleBtnActive]}
+          onPress={() => setView("stats")}
+        >
+          <Text style={[styles.toggleText, view === "stats" && styles.toggleTextActive]}>
+            Stats
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {view === "sessions" ? (
+        sessions.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>No workouts yet.</Text>
+            <Text style={styles.emptySubtext}>Complete a session to see it here.</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={sessions}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => <SessionRow session={item} />}
+            contentContainerStyle={styles.list}
+          />
+        )
       ) : (
-        <FlatList
-          data={sessions}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <SessionRow session={item} />}
-          contentContainerStyle={styles.list}
-        />
+        <StatsView />
       )}
     </SafeAreaView>
   );
@@ -123,6 +246,19 @@ const styles = StyleSheet.create({
   backBtn: { paddingRight: 16, paddingVertical: 4 },
   backText: { color: "#e63946", fontSize: 18 },
   title: { fontSize: 20, fontWeight: "800", color: "#fff" },
+  viewToggle: {
+    flexDirection: "row",
+    margin: 16,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 10,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+  },
+  toggleBtn: { flex: 1, paddingVertical: 8, alignItems: "center", borderRadius: 8 },
+  toggleBtnActive: { backgroundColor: "#e63946" },
+  toggleText: { color: "#666", fontSize: 14, fontWeight: "700" },
+  toggleTextActive: { color: "#fff" },
   list: { padding: 16, gap: 12 },
   row: {
     backgroundColor: "#1a1a1a",
@@ -151,6 +287,35 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   useBtnText: { color: "#e63946", fontSize: 13, fontWeight: "700" },
+  statsContainer: { flex: 1 },
+  segmentRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 4 },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 8,
+    backgroundColor: "#1a1a1a",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+  },
+  segmentBtnActive: { backgroundColor: "#2a2a2a", borderColor: "#444" },
+  segmentText: { color: "#555", fontSize: 13, fontWeight: "600" },
+  segmentTextActive: { color: "#fff" },
+  statsList: { padding: 16, gap: 14 },
+  statRow: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    gap: 8,
+  },
+  statRowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  statExercise: { color: "#fff", fontSize: 17, fontWeight: "700" },
+  statReps: { color: "#e63946", fontSize: 20, fontWeight: "900" },
+  barTrack: { height: 4, backgroundColor: "#2a2a2a", borderRadius: 2, overflow: "hidden" },
+  barFill: { height: 4, backgroundColor: "#e63946", borderRadius: 2 },
+  statSessions: { color: "#555", fontSize: 12 },
   empty: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8 },
   emptyText: { color: "#555", fontSize: 18, fontWeight: "700" },
   emptySubtext: { color: "#333", fontSize: 14 },
