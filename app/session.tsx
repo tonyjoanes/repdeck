@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import Animated, { FadeIn } from "react-native-reanimated";
 import type { WorkoutConfig } from "@/types/workout";
 import { SUIT_COLORS, SUIT_SYMBOLS } from "@/constants/defaults";
 import { getExerciseForCard } from "@/utils/deck";
@@ -56,7 +55,7 @@ export default function SessionScreen() {
       {/* Card */}
       <View style={styles.cardArea}>
         {card && (
-          <Animated.View key={session.currentIndex} entering={FadeIn.duration(180)} style={styles.card}>
+          <View key={session.currentIndex} style={styles.card}>
             <Text style={[styles.suitSymbol, { color: suitColor }]}>{suitSymbol}</Text>
             <Text style={[styles.rank, { color: suitColor }]}>{card.rank}</Text>
             <Text style={styles.exercise}>{exercise}</Text>
@@ -70,7 +69,7 @@ export default function SessionScreen() {
             {card.reps > 0 && card.reps !== -1 && (
               <Text style={styles.repLabel}>reps</Text>
             )}
-          </Animated.View>
+          </View>
         )}
       </View>
 
