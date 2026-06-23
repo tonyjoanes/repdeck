@@ -28,6 +28,7 @@ export default function SetupScreen() {
   const { config: configParam } = useLocalSearchParams<{ config?: string }>();
 
   const [exercises, setExercises] = useState<Record<Suit, string>>(DEFAULT_CONFIG.suitExercises);
+  const [suitCardCount, setSuitCardCount] = useState<Record<Suit, number>>(DEFAULT_CONFIG.suitCardCount);
   const [cardCount, setCardCount] = useState<CardCount>(DEFAULT_CONFIG.cardCount);
   const [includeJokers, setIncludeJokers] = useState(false);
   const [jokerRuleIndex, setJokerRuleIndex] = useState(0);
@@ -56,6 +57,7 @@ export default function SetupScreen() {
 
   function applyConfig(c: WorkoutConfig) {
     setExercises(c.suitExercises);
+    setSuitCardCount(c.suitCardCount ?? DEFAULT_CONFIG.suitCardCount);
     setCardCount(c.cardCount);
     setIncludeJokers(c.includeJokers);
     if (c.jokerRule.type === "fixed") {
@@ -81,6 +83,7 @@ export default function SetupScreen() {
         clubs: exercises.clubs.trim(),
         spades: exercises.spades.trim(),
       },
+      suitCardCount,
       cardCount,
       includeJokers,
       jokerRule,
@@ -151,21 +154,34 @@ export default function SetupScreen() {
 
         {/* Exercises */}
         <Text style={styles.sectionLabel}>EXERCISES</Text>
-        {SUITS.map((suit) => (
-          <View key={suit} style={styles.suitRow}>
-            <Text style={[styles.suitSymbol, { color: SUIT_COLORS[suit] }]}>
-              {SUIT_SYMBOLS[suit]}
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={exercises[suit]}
-              onChangeText={(v) => setExercises((prev) => ({ ...prev, [suit]: v }))}
-              placeholder="Exercise name"
-              placeholderTextColor="#555"
-              returnKeyType="done"
-            />
-          </View>
-        ))}
+        {SUITS.map((suit) => {
+          const n = suitCardCount[suit] ?? 1;
+          const isMulti = n > 1;
+          return (
+            <View key={suit} style={styles.suitRow}>
+              <Text style={[styles.suitSymbol, { color: SUIT_COLORS[suit] }]}>
+                {SUIT_SYMBOLS[suit]}
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={exercises[suit]}
+                onChangeText={(v) => setExercises((prev) => ({ ...prev, [suit]: v }))}
+                placeholder="Exercise name"
+                placeholderTextColor="#555"
+                returnKeyType="done"
+              />
+              <TouchableOpacity
+                style={[styles.multiBtn, isMulti && styles.multiBtnActive]}
+                onPress={() => setSuitCardCount((prev) => ({ ...prev, [suit]: (n % 3) + 1 }))}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={[styles.multiBtnText, isMulti && styles.multiBtnTextActive]}>
+                  ×{n}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })}
 
         {/* Deck size */}
         <Text style={styles.sectionLabel}>DECK SIZE</Text>
@@ -341,6 +357,20 @@ const styles = StyleSheet.create({
     borderColor: "#2a2a2a",
   },
   inputNarrow: { flex: 0, width: 80 },
+  multiBtn: {
+    marginLeft: 8,
+    width: 40,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: "#1a1a1a",
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  multiBtnActive: { borderColor: "#e63946", backgroundColor: "#2a0a0d" },
+  multiBtnText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  multiBtnTextActive: { color: "#e63946" },
   label: { color: "#aaa", fontSize: 15, width: 40 },
   segmentRow: { flexDirection: "row", gap: 8 },
   segmentBtn: {

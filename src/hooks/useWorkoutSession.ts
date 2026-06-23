@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Card, CardResult, WorkoutConfig } from "@/types/workout";
+import type { Card, CardResult, Suit, WorkoutConfig } from "@/types/workout";
 import { buildDeck } from "@/utils/deck";
 
 type SessionState = {
@@ -9,8 +9,15 @@ type SessionState = {
   isComplete: boolean;
 };
 
+export type Hand = {
+  primaryCard: CardResult;
+  secondaryCards: CardResult[];
+  totalReps: number;
+};
+
 type UseWorkoutSessionReturn = {
-  currentCard: Card | null;
+  currentHand: Hand | null;
+  currentCard: Card | null; // kept for backwards compat — same as currentHand.primaryCard
   cards: CardResult[];
   currentIndex: number;
   progress: number;
@@ -18,6 +25,28 @@ type UseWorkoutSessionReturn = {
   isComplete: boolean;
   advance: () => void;
 };
+
+function handSize(card: CardResult, config: WorkoutConfig): number {
+  if (card.suit === "joker") return 1;
+  return Math.max(1, config.suitCardCount[card.suit as Suit] ?? 1);
+}
+
+function buildHand(cards: CardResult[], index: number, config: WorkoutConfig): Hand | null {
+  if (index >= cards.length) return null;
+  const primary = cards[index];
+  const n = handSize(primary, config);
+  const secondary: CardResult[] = [];
+  for (let i = 1; i < n && index + i < cards.length; i++) {
+    secondary.push(cards[index + i]);
+  }
+  const primaryReps = primary.reps === -1 ? 0 : primary.reps;
+  const secondaryReps = secondary.reduce((sum, c) => sum + (c.reps === -1 ? 0 : c.reps), 0);
+  return {
+    primaryCard: primary,
+    secondaryCards: secondary,
+    totalReps: primary.reps === -1 ? -1 : primaryReps + secondaryReps,
+  };
+}
 
 export function useWorkoutSession(config: WorkoutConfig): UseWorkoutSessionReturn {
   const [state, setState] = useState<SessionState>(() => {
@@ -38,7 +67,6 @@ export function useWorkoutSession(config: WorkoutConfig): UseWorkoutSessionRetur
         prev.isComplete ? prev : { ...prev, elapsedSeconds: prev.elapsedSeconds + 1 }
       );
     }, 1000);
-
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -48,22 +76,26 @@ export function useWorkoutSession(config: WorkoutConfig): UseWorkoutSessionRetur
     setState((prev) => {
       if (prev.isComplete) return prev;
 
+      const primary = prev.cards[prev.currentIndex];
+      const n = Math.min(handSize(primary, config), prev.cards.length - prev.currentIndex);
+
       const updatedCards = prev.cards.map((c, i) =>
-        i === prev.currentIndex ? { ...c, completed: true } : c
+        i >= prev.currentIndex && i < prev.currentIndex + n ? { ...c, completed: true } : c
       );
-      const nextIndex = prev.currentIndex + 1;
+      const nextIndex = prev.currentIndex + n;
       const isComplete = nextIndex >= prev.cards.length;
 
       return { ...prev, cards: updatedCards, currentIndex: nextIndex, isComplete };
     });
-  }, []);
+  }, [config]);
 
-  const currentCard = state.isComplete ? null : state.cards[state.currentIndex] ?? null;
+  const currentHand = buildHand(state.cards, state.currentIndex, config);
   const total = state.cards.length;
   const progress = total > 0 ? state.currentIndex / total : 0;
 
   return {
-    currentCard,
+    currentHand,
+    currentCard: currentHand?.primaryCard ?? null,
     cards: state.cards,
     currentIndex: state.currentIndex,
     progress,

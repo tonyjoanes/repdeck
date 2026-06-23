@@ -13,6 +13,7 @@ export type CardCount = 10 | 20 | 26 | 52;
 
 export type WorkoutConfig = {
   suitExercises: Record<Suit, string>;
+  suitCardCount: Record<Suit, number>; // cards drawn per hand for each suit (1-3)
   cardCount: CardCount;
   jokerRule: JokerRule;
   includeJokers: boolean;

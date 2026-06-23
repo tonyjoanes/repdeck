@@ -30,8 +30,16 @@ export const SUIT_COLORS: Record<Suit, string> = {
 
 export const CARD_COUNT_OPTIONS: CardCount[] = [10, 20, 26, 52];
 
+export const DEFAULT_SUIT_CARD_COUNT: Record<Suit, number> = {
+  hearts: 1,
+  diamonds: 1,
+  clubs: 1,
+  spades: 1,
+};
+
 export const DEFAULT_CONFIG: WorkoutConfig = {
   suitExercises: { ...DEFAULT_EXERCISES },
+  suitCardCount: { ...DEFAULT_SUIT_CARD_COUNT },
   cardCount: 52,
   jokerRule: { type: "skip" },
   includeJokers: false,

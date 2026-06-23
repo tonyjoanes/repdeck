@@ -34,13 +34,21 @@ export function saveSession(result: SessionResult): string {
     [id, startedAt, finishedAt, totalReps, result.elapsedSeconds, result.config.cardCount, JSON.stringify(result.config)]
   );
 
-  for (let i = 0; i < result.cards.length; i++) {
-    const card = result.cards[i];
-    const exercise = card.suit === "joker" ? "Joker" : result.config.suitExercises[card.suit as Suit];
-    db.runSync(
-      "INSERT INTO card_results (session_id, position, suit, rank, exercise, reps, completed) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [id, i, card.suit, card.rank, exercise, card.reps, card.completed ? 1 : 0]
-    );
+  // Walk the deck by hand so secondary cards are attributed to the primary exercise
+  let i = 0;
+  while (i < result.cards.length) {
+    const primary = result.cards[i];
+    const primaryExercise = primary.suit === "joker" ? "Joker" : result.config.suitExercises[primary.suit as Suit];
+    const n = primary.suit === "joker" ? 1 : Math.max(1, result.config.suitCardCount[primary.suit as Suit] ?? 1);
+
+    for (let j = 0; j < n && i + j < result.cards.length; j++) {
+      const card = result.cards[i + j];
+      db.runSync(
+        "INSERT INTO card_results (session_id, position, suit, rank, exercise, reps, completed) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [id, i + j, card.suit, card.rank, primaryExercise, card.reps, card.completed ? 1 : 0]
+      );
+    }
+    i += n;
   }
 
   return id;
